@@ -1,6 +1,8 @@
 # WindingHomology
 Computes the winding homology, the Turaev polynomial, and the Khovanov homology of knotoids.
 
+Built on top of the code of Bar-Natan’s programto  compute  the  Khovanov  homology  of  knots, see http://katlas.org/wiki/Khovanov_Homology .
+
 Knotoids are written in the planar diagram (PD) notation, see http://katlas.org/wiki/Planar_Diagrams .
 
 Example: K=PD[X[3, 1, 4, 2], X[2, 4, 3, 5]] is a bifoil knotoid.
