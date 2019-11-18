@@ -1,1 +1,331 @@
-.
+np[L_PD] := Count[L, X[i_, j_, k_, l_] /; j - l == 1 || l - j > 1];
+nm[L_PD] := Count[L, X[i_, j_, k_, l_] /; l - j == 1 || j - l > 1];
+SetAttributes[p, Orderless];
+HasQ[m_][X[i_, j_, k_, l_]] := 
+  If[m == i || m == j || m == k || m == l, True, False];
+FindCrossingsWith[K_PD, m_Integer] := Select[K, HasQ[m]];
+Friend[K_PD, a_Integer, b_Integer] := 
+  Module[{m = K[[a, b]], l = FindCrossingsWith[K, K[[a, b]]]},
+   If[Length[l] == 1,
+    {a, If[Position[K[[a]], m][[1, 1]] == b, 
+      Position[K[[a]], m][[2, 1]], Position[K[[a]], m][[1, 1]]]},
+    If[l[[1]] === K[[a]],
+     {Position[K, l[[2]]][[1, 1]], Position[l[[2]], m][[1, 1]]},
+     {Position[K, l[[1]]][[1, 1]], Position[l[[1]], m][[1, 1]]}
+     ]
+    ]
+   ];
+(*Finds the matching number's coordinates for the number in the a-th \
+crossing's b-th entry*)
+S1[L_PD, s_String] := S1[L, Characters[s] /. {"0" -> 0, "1" -> 1}];
+S1[L_PD, a_List] := 
+ Times @@ (Thread[{List @@ L, a}] /. {{X[i_, j_, k_, l_], 0} :> 
+            p[i, j][Min[i, j]] p[k, l][Min[k, l]], {X[i_, j_, k_, l_],
+              1} :> p[i, l][Min[i, l]] p[j, k][Min[j, k]], {x_X, 
+             "*"} :> 
+            If[Length[Union[List @@ x]] < 4, 
+             Module[{com = First[Commonest[List @@ x]]}, 
+              x*p[com, com][com]], x]})*p[1, 1][1] //. 
+      p[i_, j_][m_] p[j_, k_][n_] :> 
+       p[i, k][Min[m, 
+         n]] //. {X[i_, j_, k_, l_] p[1, d_][1] p[b_, e_][m_] /; 
+        SubsetQ[X[i, j, k, l], 
+          X[d, b, e]] && (p[i, j] === p[b, e] || 
+           p[k, l] === p[b, e]) :> (c[1] c[m] -> c[1]),
+      X[i_, j_, k_, l_] p[1, d_][1] p[b_, e_][m_] /; 
+        SubsetQ[X[i, j, k, l], 
+          X[d, b, e]] && (p[j, k] === p[b, e] || 
+           p[i, l] === p[b, e]) :> (c[1] -> c[1] c[m]),
+      X[i_, j_, k_, l_] p[1, d_][1] p[b_, e_][m_] /; 
+        SubsetQ[X[i, j, k, l], 
+          X[d, b, e]] && (p[i, k] === p[b, e] || 
+           p[j, l] === p[b, e]) :> (c[1] -> c[1])
+      } //. {X[i_, j_, k_, l_] p[i_, j_][m_] p[k_, l_][
+        n_] :> (c[m] c[n] -> c[Min[m, n]]), 
+     X[i_, j_, k_, l_] p[i_, l_][m_] p[j_, k_][n_] :> (c[Min[m, n]] ->
+         c[m] c[n])} /. p[2*Length[L] + 1, g_][_] /; g != 1 :> 1 //. 
+  p[_, _][m_]^_. :> c[m]
+(*p[1,1][1] is in case the first crossing is referred by the star. \
+p[2,2][2] is needed for fish knotoid but omitted to avoid bugs.*)
+
+Deg[expr_] := Count[expr, _vp, {0, 1}] - Count[expr, _vm, {0, 1}];
+V1[L_PD, s_String, deg___] := 
+ V1[L, Characters[s] /. {"0" -> 0, "1" -> 1}, deg]
+V1[L_PD, a_List] := 
+ If[Length[S1[L, a]] == 1, {vm[1]}, 
+  List @@ Expand[
+    S1[L, a] /. {c[1] :> vm[1], x_c :> ((vp @@ x) + (vm @@ x))}]]
+V1[L_PD, a_List, deg_Integer] := 
+ Select[V1[L, a], (deg == Deg[#] + (Plus @@ a)) &]
+
+d1[L_PD, s_String] := d1[L, Characters[s] /. {"0" -> 0, "1" -> 1}]
+d1[L_PD, a_List] := 
+ S1[L, a] /. {(c[x_] c[y_] -> c[z_])*_. :> {vp@x vp@y -> vp@z, 
+     vp@x vm@y -> vm@z, vm@x vp@y -> vm@z, 
+     vm@x vm@y -> 0}, (c[z_] -> c[x_] c[y_])*_. :> {vp@z -> 
+      vp@x vm@y + vm@x vp@y, vm@z -> vm@x vm@y},
+   (c[1] -> c[1])*_. :> {vm[1] -> 0}}
+
+KhBracket1[L_PD, r_Integer, deg___] := 
+ If[r < 0 || r > Length[L], {0}, 
+  Join @@ (((v @@ #) V1[L, #, deg]) & /@ 
+     Permutations[Join[Table[0, {Length[L] - r}], Table[1, {r}]]])]
+
+CC1[L_PD, r_Integer, deg_Integer] := 
+ KhBracket1[L, r + nm[L], deg - np[L] + 2 nm[L]]
+
+d1[L_PD][expr_] := 
+ Expand[expr] /. 
+  s_*a_v :> 
+   Expand[sign = 1; 
+    Sum[If[a[[i]] == 0, 
+      sign*ReplacePart[a, 1, i]*s /. 
+       d1[L, List @@ ReplacePart[a, "*", i]], sign *= -1; 0], {i, 
+      Length[a]}]]
+
+Options[Betti1] = {Modulus -> Infinity};
+Rank1[L_PD, r_Integer, deg_Integer, opts___] := 
+ Module[{b, b0, l1, eqs, rk, b1, vars}, 
+  Rank1[L, r, deg, 
+    opts] = (modulus = (Modulus /. {opts} /. Options[Betti1]);
+    Off[Solve::svars];
+    b0 = CC1[L, r, deg];
+    l1 = Length[b1 = CC1[L, r + 1, deg]];
+    eqs = (# == 0) & /@ d1[L][b0] /. 
+      MapThread[Rule, {b1, vars = Array[b, l1]}];
+    rk = Which[b0 == {} || l1 == 0, 0, modulus === Infinity, 
+      Length[First[Solve[eqs, vars]]], True, 
+      Length[First[
+         Solve[Append[eqs, Modulus == modulus], vars, 
+          Modulus -> modulus]]] - 1];
+    On[Solve::svars];
+    rk)]
+Betti1[L_PD, r_Integer, deg_Integer, opts___] := 
+ Module[{b}, 
+  Betti1[L, r, deg, 
+    opts] = (b = 
+     Length[CC1[L, r, deg]] - Rank1[L, r, deg, opts] - 
+      Rank1[L, r - 1, deg, opts];
+    (*Print[StringForm["Betti1[``,``] = ``",r,deg,b]]*) b)]
+
+qBetti1[L_PD, r_Integer, 
+  opts___] := (degs = 
+   Union[Deg /@ KhBracket1[L, r + nm[L]]] + np[L] - nm[L] + r;
+  (Betti1[L, r, #, opts] & /@ degs).q^degs)
+
+KhKnotoid[L_PD, opts___] := 
+  KhKnotoid[L, opts] = 
+   Expand[Expand[
+      Sum[t^r*qBetti1[L, r, opts], {r, -nm[L], Length[L] - nm[L]}]]*q];
+(*Calculates the Poincare polynomial of the Khovanov homology of the \
+knotoid*)
+
+S2[L_PD, s_String] := S2[L, Characters[s] /. {"0" -> 0, "1" -> 1}];
+S2[L_PD, a_List] := 
+ Times @@ (Thread[{List @@ L, a}] /. {{X[i_, j_, k_, l_], 0} :> 
+            p[i, j][Min[i, j]] p[k, l][Min[k, l]], {X[i_, j_, k_, l_],
+              1} :> p[i, l][Min[i, l]] p[j, k][Min[j, k]], {x_X, 
+             "*"} :> 
+            If[Length[Union[List @@ x]] < 4, 
+             Module[{com = First[Commonest[List @@ x]]}, 
+              x*p[com, com][com]], x]})*p[1, 1][1] //. 
+      p[i_, j_][m_] p[j_, k_][n_] :> 
+       p[i, k][Min[m, 
+         n]] //. {X[i_, j_, k_, l_] p[1, d_][1] p[b_, e_][m_] /; 
+        SubsetQ[X[i, j, k, l], 
+          X[d, b, e]] && (p[i, j] === p[b, e] || 
+           p[k, l] === p[b, e]) :> (c[1] c[m] -> c[1]),
+      X[i_, j_, k_, l_] p[1, d_][1] p[b_, e_][m_] /; 
+        SubsetQ[X[i, j, k, l], 
+          X[d, b, e]] && (p[j, k] === p[b, e] || 
+           p[i, l] === p[b, e]) :> (c[1] -> c[1] c[m]),
+      X[i_, j_, k_, l_] p[1, d_][1] p[b_, e_][m_] /; 
+        SubsetQ[X[i, j, k, l], 
+          X[d, b, e]] && (p[i, k] === p[b, e] || 
+           p[j, l] === p[b, e]) :> (c[1] -> c[1])
+      } //. {X[i_, j_, k_, l_] p[i_, j_][m_] p[k_, l_][
+        n_] :> (c[m] c[n] -> c[Min[m, n]]), 
+     X[i_, j_, k_, l_] p[i_, l_][m_] p[j_, k_][n_] :> (c[Min[m, n]] ->
+         c[m] c[n])} /. p[2*Length[L] + 1, g_][_] /; g != 1 :> 1 //. 
+  p[_, _][m_]^_. :> c[m]
+(*p[1,1][1] is in case the first crossing is referred by the star. \
+p[2,2][2] is needed for fish knotoid but omitted to avoid bugs.*)
+
+Deg[expr_] := Count[expr, _vp, {0, 1}] - Count[expr, _vm, {0, 1}];
+FlowOrientation[X[i_, j_, k_, l_], n_Integer] := 
+  If[l - j == 1, If[n == 1 || n == 2, 1, -1], 
+   If[n == 1 || n == 4, 1, -1]];
+(*Finds whether the incoming segment has the same orientation(1) as K \
+or opposite(-1). n varies from 1 to 4 specifying the entry of X*)
+ApproachLevel[X[i_, j_, k_, l_], n_Integer] := 
+  If[n == 2 || n == 4, 1, -1];
+(*Finds whether the incoming segment is to an overpass(1) or \
+underpass(-1)*)
+CrossingSign[X[i_, j_, k_, l_]] := 
+  Which[j - l == 1, 1, l - j == 1, -1];
+Turn[n_Integer, m_Integer] := 
+  Which[m == 0 && n == 1, 2, m == 0 && n == 2, 1, m == 0 && n == 3, 4,
+    m == 0 && n == 4, 3, m == 1 && n == 1, 4, m == 1 && n == 4, 1, 
+   m == 1 && n == 2, 3, m == 1 && n == 3, 2];
+(*n varies from 1 to 4 as the position of the incoming segment entry. \
+m is 0 or 1 as smoothing. Output is the position of the entry of the \
+outgoing segment*)
+uDegAssign[L_PD, s_String] := 
+  uDegAssign[L, Characters[s] /. {"0" -> 0, "1" -> 1}];
+uDegAssign[L_PD, a_List] := 
+  Module[{x = Position[L, 1][[1, 1]], y = Position[L, 1][[1, 2]], 
+    count = 0},
+   While[True,
+    count += 
+     FlowOrientation[L[[x]], y]*
+      ApproachLevel[L[[x]], y]*(-1)^(a[[x]])*
+      KroneckerDelta[CrossingSign[L[[x]]], (-1)^(a[[x]] + 1)];
+    If[{x, Turn[y, a[[x]]]} == Position[L, 2*Length[L] + 1][[1]], 
+     Break[]];
+    {x, y} = Friend[L, x, Turn[y, a[[x]]]];
+    ]; count
+   ];
+uDegRecover[expr_] := Module[{h}, (expr /. h_u*_. -> h)[[1]]];
+V2[L_PD, s_String, deg___] := 
+ V2[L, Characters[s] /. {"0" -> 0, "1" -> 1}, deg]
+V2[L_PD, a_List] := 
+ If[Length[S2[L, a]] == 1, {vm[1]*u[uDegAssign[L, a]]}, 
+  List @@ Expand[
+    S2[L, a] /. {c[1] :> vm[1]*u[uDegAssign[L, a]], 
+      x_c :> ((vp @@ x) + (vm @@ x))}]]
+V2[L_PD, a_List, qdeg_Integer] := 
+ Select[V2[L, a], (qdeg == Deg[#] + (Plus @@ a)) &]
+V2[L_PD, a_List, qdeg_Integer, udeg_Integer] := 
+ Select[V2[L, 
+   a], (qdeg == Deg[#] + (Plus @@ a) && udeg == uDegRecover[#]) &]
+
+d2[L_PD, s_String] := d2[L, Characters[s] /. {"0" -> 0, "1" -> 1}]
+d2[L_PD, a_List] := 
+ S2[L, a] /. {(c[x_] c[y_] -> c[z_])*_. :> {vp@x vp@y -> vp@z, 
+     vp@x vm@y -> vm@z, vm@x vp@y -> vm@z, 
+     vm@x vm@y -> 0}, (c[z_] -> c[x_] c[y_])*_. :> {vp@z -> 
+      vp@x vm@y + vm@x vp@y, vm@z -> vm@x vm@y},
+   (c[1] -> c[1])*_. :> {vm[1] -> 0}}
+
+KhBracket2[L_PD, r_Integer, deg___] := KhBracket2[L, r, deg];
+KhBracket2[L_PD, r_Integer] := 
+  If[r < 0 || r > Length[L], {0}, 
+   Join @@ (((v @@ #) V2[L, #]) & /@ 
+      Permutations[Join[Table[0, {Length[L] - r}], Table[1, {r}]]])];
+KhBracket2[L_PD, r_Integer, qdeg_Integer] := 
+  If[r < 0 || r > Length[L], {0}, 
+   Join @@ (((v @@ #) V2[L, #, qdeg]) & /@ 
+      Permutations[Join[Table[0, {Length[L] - r}], Table[1, {r}]]])];
+KhBracket2[L_PD, r_Integer, qdeg_Integer, udeg_Integer] := 
+  If[r < 0 || r > Length[L], {0}, 
+   Join @@ (((v @@ #) V2[L, #, qdeg, udeg]) & /@ 
+      Permutations[Join[Table[0, {Length[L] - r}], Table[1, {r}]]])];
+
+CC2[L_PD, r_Integer, deg___] := CC2[L, r, deg];
+CC2[L_PD, r_Integer, qdeg_Integer] := 
+  KhBracket2[L, r + nm[L], qdeg - np[L] + 2 nm[L]];
+CC2[L_PD, r_Integer, qdeg_Integer, udeg_Integer] := 
+  KhBracket2[L, r + nm[L], qdeg - np[L] + 2 nm[L], udeg];
+
+d2[L_PD][expr_] := 
+ Expand[expr] /. 
+  s_*a_v :> 
+   Expand[sign = 1; 
+    Sum[If[a[[i]] == 0, 
+      sign*ReplacePart[a, 1, i]*s /. 
+       d2[L, List @@ ReplacePart[a, "*", i]], sign *= -1; 0], {i, 
+      Length[a]}]]
+
+Options[Betti2] = {Modulus -> Infinity};
+Rank2[L_PD, r_Integer, qdeg_Integer, udeg_Integer, opts___] := 
+ Module[{b, b0, l1, eqs, rk, b1, vars}, 
+  Rank2[L, r, qdeg, udeg, 
+    opts] = (modulus = (Modulus /. {opts} /. Options[Betti2]);
+    Off[Solve::svars];
+    b0 = CC2[L, r, qdeg, udeg];
+    l1 = Length[b1 = CC2[L, r + 1, qdeg, udeg]];
+    eqs = (# == 0) & /@ d2[L][b0] /. 
+      MapThread[Rule, {b1, vars = Array[b, l1]}];
+    rk = Which[b0 == {} || l1 == 0, 0, modulus === Infinity, 
+      Length[First[Solve[eqs, vars]]], True, 
+      Length[First[
+         Solve[Append[eqs, Modulus == modulus], vars, 
+          Modulus -> modulus]]] - 1];
+    On[Solve::svars];
+    rk)]
+Betti2[L_PD, r_Integer, qdeg_Integer, udeg_Integer, opts___] := 
+ Module[{b}, 
+  Betti2[L, r, qdeg, udeg, 
+    opts] = (b = 
+     Length[CC2[L, r, qdeg, udeg]] - Rank2[L, r, qdeg, udeg, opts] - 
+      Rank2[L, r - 1, qdeg, udeg, opts];(*Print[StringForm[
+    "Betti2[``,``,``] = ``",r,qdeg,udeg,b]]*) b)]
+uBetti2[L_PD, r_Integer, qdeg_Integer, 
+  opts___] := (udegs = 
+   Union[uDegRecover /@ 
+     KhBracket2[L, r + nm[L], qdeg - np[L] + 2 nm[L]]];
+  (Betti2[L, r, qdeg, #, opts] & /@ udegs).u^udegs)
+qBetti2[L_PD, r_Integer, 
+  opts___] := (qdegs = 
+   Union[Deg /@ KhBracket2[L, r + nm[L]] ] + np[L] - nm[L] + r;
+  (uBetti2[L, r, #, opts] & /@ qdegs).q^qdegs)
+
+Winding[L_PD, opts___] := 
+  Winding[L, opts] = 
+   Expand[Expand[
+      Sum[t^r*qBetti2[L, r, opts], {r, -nm[L], Length[L] - nm[L]}]]*q];
+(*Calculates the Poincare polynomial of the winding homology of the \
+knotoid.*)
+
+KnotToKnotoidLv2[L_PD] := 
+  Module[{newL = KnotToKnotoid[L], MarkedCrossing},
+   MarkedCrossing = 
+    Select[newL, 
+      SubsetQ[#, X[2*Length[newL], 2*Length[newL] + 1]] &][[1]]; 
+   DeleteCases[newL, MarkedCrossing] /. 
+    n_ /; n >= RankedMax[List @@ MarkedCrossing, 3] -> n - 1];
+(*Applies a double Omega move to a knot.*)
+
+KnotToKnotoid[L_PD] := 
+  Module[{MarkedCrossing = 
+     Select[L, SubsetQ[#, X[1, 2*Length[L]]] &][[1]]}, 
+   DeleteCases[L, MarkedCrossing] /. 
+    n_ /; n >= RankedMax[List @@ MarkedCrossing, 2] -> n - 1];
+(*Applies a single Omega move to a knot.*)
+
+JS1[L_PD, s_String] := JS1[L, Characters[s] /. {"0" -> 0, "1" -> 1}];
+JS1[L_PD, 
+   a_List] := (Times @@ (Thread[{List @@ L, 
+           a}] /. {{X[i_, j_, k_, l_], 0} :> 
+           A*p[i, j] p[k, l], {X[i_, j_, k_, l_], 1} :> 
+           A^(-1)*p[i, l] p[j, k]})) //. 
+     p[i_, j_] p[j_, k_] :> p[i, k] /. p[1, 2*Length[L] + 1] :> 1 //. 
+   p[_, _]^_. :> (-A^2 - A^(-2));
+(*Jones polynomial for knotoids*)
+JonesKnotoid[L_PD] := Module[{sum = 0, n = Length[L], i},
+   For[i = 0, i < n + 1, i++,
+    sum += 
+     Plus @@ (JS1[L, #] & /@ 
+        Permutations[Join[Table[0, {n - i}], Table[1, {i}]]])
+    ]; Expand[sum*(-A^3)^(-np[L] + nm[L])]
+   ];
+(*Calculates the Jones polynomial of the knotoid.*)
+
+JS2[L_PD, s_String] := JS2[L, Characters[s] /. {"0" -> 0, "1" -> 1}];
+JS2[L_PD, 
+   a_List] := ((Times @@ (Thread[{List @@ L, 
+             a}] /. {{X[i_, j_, k_, l_], 0} :> 
+             A*p[i, j] p[k, l], {X[i_, j_, k_, l_], 1} :> 
+             A^(-1)*p[i, l] p[j, k]})) //. 
+       p[i_, j_] p[j_, k_] :> p[i, k] /. 
+      p[1, 2*Length[L] + 1] :> 1 //. p[_, _]^_. :> (-A^2 - A^(-2)))*
+   u^uDegAssign[L, a];
+(*Jones-Turaev polynomial for knotoids*)
+Turaev[L_PD] := Module[{sum = 0, n = Length[L], i},
+   For[i = 0, i < n + 1, i++,
+    sum += 
+     Plus @@ (JS2[L, #] & /@ 
+        Permutations[Join[Table[0, {n - i}], Table[1, {i}]]])
+    ]; Expand[sum*(-A^3)^(-np[L] + nm[L])]
+   ];
+(*Calculates the Turaev polynomial of the knotoid.*)
